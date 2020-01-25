@@ -1,0 +1,445 @@
+---
+title: <center><b> Anime World </b></center>
+author: <center> Priyanka Pavithran | Varun Varma </center> 
+output: 
+  html_document :
+    code_folding : show
+---
+
+<style>
+body {
+text-align: justify}
+</style>
+
+# {.tabset .tabset-fade .tabset-pills}
+
+## 1. Synopsis
+
+
+```{r Importing the Data from the URL, echo=FALSE,include=FALSE}
+tidy_anime <- data.table::fread("anime_data/tidy_anime.csv", stringsAsFactors = FALSE, header = TRUE)
+```
+[**MyAnimeList**](https://myanimelist.net/), frequently truncated as MAL, is an anime and manga social indexing application site. The site furnishes its clients with a rundown like a framework to arrange and score anime and manga. It encourages discovering clients who share comparative tastes and gives an enormous database of anime and manga.
+
+Anime without rankings or popularity scores were rejected. Producers, genre, and studio were converted from lists to tidy observations, so there will be reiterations of shows with multiple producers, genres and so on.
+
+
+![](anime_wallpaper.jpg)
+
+#### **Problem Statement**
+This analysis has been done to investigate the different components that impact the prominence or rank of a specific anime.
+ 
+ 
+#### **Implementation**
+The data was cleaned and shaped accordingly to carry out the analysis and infer the results.
+
+## 2. Packages Required
+
+```{r Loading the required packages, echo=TRUE, results='hide', message=FALSE, warning=FALSE}
+library(tidyr)
+library(DT)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(kableExtra)
+library(lubridate)
+library(readxl)
+library(highcharter)
+library(lubridate)
+library(scales)
+library(RColorBrewer)
+library(wesanderson)
+library(plotly)
+library(shiny)
+library(readxl)
+
+```
+
+```{r displaying the packages table, echo=FALSE}
+#Reading the variable summary excel File
+package_sum <- read_excel("Package Summary.xlsx")
+
+kable(package_sum) %>%
+kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, fixed_thead = T, )
+``` 
+## 3. Data Preparation {.tabset .tabset-fade .tabset-pills}
+
+### 3.1 Data Source
+
+The data used in the analysis can be found [**here**](https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-04-23/tidy_anime.csv).
+[**MyAnimeList**](https://myanimelist.net/), frequently truncated as MAL, is an anime and manga social indexing application site. The site furnishes its clients with a rundown like a framework to arrange and score anime and manga. It encourages discovering clients who share comparative tastes and gives an enormous database of anime and manga.
+
+Anime without rankings or popularity scores were rejected. Producers, genre, and studio were converted from lists to tidy observations, so there will be reiterations of shows with multiple producers, genres and so on.
+
+The original Dataset that has been used for this project can be found [**here**](https://github.com/rfordatascience/tidytuesday/blob/master/data/2019/2019-04-23/raw_anime.csv)
+
+### 3.2 Data Cleaning
+
+The column **start_date** has the date, month and year combined. We are extracting the year from this, naming it as
+**premiered_year** so that the analysis can be done based on year.
+
+For a similar reason, we are splitting the **Broadcast** column into **Day_of_week** and **Time** to help in our analysis.
+
+```{r Separating the columns, echo=TRUE, warning=FALSE, results='hide'}
+anime_clean <- tidy_anime %>% 
+  mutate(premiered_year=(year(mdy(start_date)))) %>%
+  separate(broadcast, c("Day_of_Week", "Not_Needed1", "Time", "Not_Needed_2"), sep = " " ) %>% 
+  select(-c(Not_Needed1,Not_Needed_2))
+```
+
+A lot of columns doesn't give any valuable data to us in our investigation. In this way, going ahead, it is better to remove those columns and confine our investigation to the columns which give significant bits of knowledge from the given information.
+
+For this, we are removing the following columns from our dataset:
+
+* Title - English
+* Title - Japanese
+* Title - Synonyms
+* Background
+* Synopsis
+* Premiered
+* Related
+* Status
+* End Date
+
+```{r Filtering the columns of interest, echo=TRUE}
+anime_final <- select(anime_clean, -c(title_english, title_japanese, title_synonyms, background, synopsis,premiered, related,status,end_date))
+
+```
+
+After removing the unnecessary columns, we rename all the column names with appropriate names using the *snake_case*.
+
+```{r Renaming the column names with appropiate names, echo=TRUE, warning=FALSE, results='hide'}
+names(anime_final) <- c("anime_id", "anime_name", "anime_type", "source", "producers", "genre", "studio", "no_of_episodes", "airing_status", "start_date", "episode_duration", "MPAA_rating", "viewers_rating", "rated_by_no_of_viewers", "rankings", "popularity_index", "wishlisted_members", "favorites", "broadcast_day", "broadcast_time", "premiered_year")
+```
+
+After checking the summary of the data, we observe that we need to encode the **Unknown** values of Anime Type to NA
+
+```{r Encoding missing values of Anime Type, echo=TRUE, warning=FALSE, results='hide'}
+anime_final$anime_type[anime_final$anime_type == "Unknown"] <- NA
+```
+
+For the broadcast day column, we need to encode (Other) and Unknown to NA.
+
+```{r Encoding missing values of Broadcast Day, echo=TRUE, warning=FALSE, results='hide'}
+anime_final$broadcast_day[anime_final$broadcast_day == "Not"] <- NA
+anime_final$broadcast_day[anime_final$broadcast_day == "Unknown"] <- NA
+```
+
+It would be helpful in our analysis to change the following variables from character as categorical variables:
+* Type
+* Genre
+* Rating
+* Premiered Season
+* Day of Week
+
+```{r Changing the abpve variables to categorical variables, echo=TRUE, warning=FALSE, results='hide'}
+anime_final %>% mutate_at(.vars = c("anime_type", "genre", "MPAA_rating", "broadcast_day"), .funs = as.factor)
+
+
+```
+
+The column **Start_Date** is a character variable. Converting them to Date variables would help in further analysis.
+
+```{r Convert to Date Variables,echo=TRUE, warning=FALSE,results='hide'}
+anime_final$start_date <- as.Date(anime_final$start_date)
+anime_final$premiered_year <- as.numeric(anime_final$premiered_year)
+
+```
+
+### 3.3 Cleaned Dataset
+
+The final cleaned dataset can be found below in an interactive table.
+
+```{r Cleaned Dataset, echo=TRUE, warning=FALSE}
+datatable(anime_final, filter = 'top')
+```
+
+### 3.4 Summary of Variables
+
+```{r displaying the summary variables table, echo=TRUE}
+#Reading the variable summary excel File
+var_sum <- read_excel("variable_summary.xlsx")
+
+kable(var_sum) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = F, fixed_thead = T, )
+```
+
+
+
+## 4. Exploratory Data Analysis{.tabset .tabset-fade .tabset-pills}
+
+If we eagerly watch the Anime dataset, we can see that each anime has various entries reliant on the number of sorts into which it will, in general, be described. Thus, for our assessment it would be helpful in case we can make a dataset with a singular area for each anime.
+
+```{r Building the unique anime dataset, echo=TRUE, warning=FALSE, results='hide' }
+unique_anime <- anime_final %>% distinct(anime_id, .keep_all = TRUE)
+
+```
+
+### Anime Trend
+
+
+```{r Analysing the number of anime trend, echo=TRUE,  warning=FALSE, results='markup' , fig.width=10}
+  anime_final$premiered_year = as.numeric(anime_final$premiered_year)
+   data_line_year <- unique_anime %>%
+    filter(!is.na(premiered_year)) %>% filter(premiered_year!=2019) %>%
+     filter(anime_type %in% c("TV","Movie","Music","OVA","ONA","Special")) %>%
+     group_by(anime_type,"Year" = premiered_year) %>%
+     summarise(Freq = n())
+
+   data_line_year %>%
+     transform(id = as.integer(factor(anime_type))) %>%
+     plot_ly(x = ~Year, y = ~Freq, color = ~anime_type, yaxis = ~paste0("y", id)) %>%
+     add_lines() %>%
+     subplot(nrows = 6 , shareX = TRUE) %>%
+       layout(title = "Anime with Time", 
+         xaxis = list(title = "Year"),
+         yaxis = list(title = "Number of Animes")) 
+```
+
+
+
+In the graph above, we display the number of animes per year starting from the early 1900s to 2018 for  Movie, Music, ONA, OVA,Special and TV. The following trends have been observed:
+
+* Anime of Movie type have been existing since the early 1900s. The count of animes has been constant to low value until the 1980s after which the count of animes is increasing with each passing year.
+* Anime Music started existing since the 1960s. The count of animes has been constant to low value until the year 2000 after which the count of animes is increasing with each passing year.
+* ONA Anime are very new as they started existing around the year 2000. The count of animes is constantly increasing with each passing year.
+* OVA Anime started existing since the 1960s. The count of animes has been constant to low value until the 1980s after which the count of animes increased until late 1990s after which started decreasing with each passing year and now, the minimum compared to other anime types.
+* Specials of anime started existing since the 1960s. The count of animes has been constant to low value until the year 2000 after which the count of animes is increasing with each passing year until recent years where we can observe the drop in the anime count.
+* TV series in anime started existing around 1960s. The count of animes have been increasing with each passing year and now, the maximum compared to other anime types.
+
+ 
+### Anime Type
+
+Manga and anime are well known for some individuals around the globe and has been one of Japan's most worthwhile organizations. Throughout the years the notoriety of anime has expanded fundamentally over the globe. This pattern can be unmistakably broke down by the bar diagram underneath: 
+
+
+```{r Anime Type Popularity, echo=TRUE, warning=FALSE, results='markup', fig.width=10}
+
+unique_anime %>% 
+  filter(!(is.na(anime_type))) %>% 
+  filter(!(anime_type == "Unknown")) %>% 
+  group_by(anime_type) %>% 
+  summarise(mean_user_rating = mean(viewers_rating, na.rm = TRUE)) %>% arrange(mean_user_rating) %>% 
+hchart(., type = "column", 
+       hcaes(x = anime_type, 
+             y = mean_user_rating, 
+             )) %>% 
+  hc_title(text ="Popular Anime Type Based on Viewer Rating") %>%
+  hc_xAxis(title = list(text= "Anime Type")) %>% 
+  hc_yAxis(title = list(text="Mean User Rating")) %>% 
+  hc_tooltip(pointFormat = '{point.y:.2f}')
+```
+    
+
+From the above graph, we can reason that the most well-known anime-type is **TV** trailed by **Special and OVA** while the least is of **Music**. The TV has a mean viewer rating of **6.75** which is the most imperative among all other anime types.
+
+### Anime Genre
+
+
+```{r Genre vs Mean Users Rating, echo=TRUE, warning=FALSE, message=FALSE, results='markup' , fig.width=10}
+anime_final %>% 
+  group_by(genre) %>% 
+  summarise( mean_rating = mean(viewers_rating, na.rm = TRUE)) %>% 
+  top_n(10) %>% arrange(mean_rating) %>%
+  plot_ly( x = ~mean_rating, y = ~reorder(genre,+mean_rating), type = 'bar',
+             marker = list(color = 'rgb(200,202,100)',
+                           line = list(color = 'rgb(8,48,107)',
+                                       width = 1.5))) %>%
+  layout(title = "Top 10 Popular Anime Genre", 
+         xaxis = list(title = "Mean User Ratings"),
+         yaxis = list(title = "Anime Genre")) 
+
+anime_final %>% 
+  group_by(genre) %>% 
+  summarise( mean_rating = mean(viewers_rating, na.rm = TRUE)) %>% 
+  arrange(mean_rating) %>% head(10)%>%
+  plot_ly( x = ~mean_rating, y = ~reorder(genre,+mean_rating), type = 'bar',
+             marker = list(color = 'rgb(200,202,100)',
+                           line = list(color = 'rgb(8,48,107)',
+                                       width = 1.5))) %>%
+  layout(title = "Least 10 Popular Anime Genre", 
+         xaxis = list(title = "Mean User Ratings"),
+         yaxis = list(title = "Anime Genre")) 
+
+```
+
+
+The above graph gives us the top and least 10 anime orders based on mean viewers rating. From that, we can see that the **Thriller** genre has the best viewer rating( more than 7.5 out of 10) which shows the thriller anime-type is commonly favored by the watchers when appeared differently in relation to all other anime sorts while **Dementia** genre has the least viewer rating(around 5.2). 
+
+
+Now let's try to find out the most popular genres in the anime industry based on the anime count. We can deduce this by counting the number of anime in each genre and representing them via the graph.
+
+```{r Number of Viewer Ratings per Genre, echo=TRUE, warning=FALSE, results='markup', fig.width=10}
+
+anime_final %>%
+  filter(!(is.na(genre))) %>% 
+  group_by(genre) %>%
+  summarize(total = sum(anime_id)) %>%
+  plot_ly( x = ~total, y = ~reorder(genre, +total), type = 'bar',
+             marker = list(color = 'rgb(200,100,100)',
+                           line = list(color = 'rgb(8,48,50)',
+                                       width = 1.5))) %>%
+  layout(title = "Number of Animes per Genre", 
+         xaxis = list(title = "Total Number of Anime Produced"),
+         yaxis = list(title = "Anime Genre")) 
+
+```
+
+
+From the above chart, we can see that even though **Thriller**  genre has the highest mean viewer rating, **Comedy** Genre has the most number of unique animes among all the anime classifications followed by **Action** and **Fantasy**. Among the least famous kinds in anime industry are **Shounen AI**, **Shoujo Ai** and **Cars**.
+
+### Broadcasting Days
+
+Now we will try to find the comparison of the percentage of shows broadcasted and its viewership by Weekdays to figure out which day is most appropriate for broadcasting and popularity the show to gain the most attention from the viewers.
+
+
+```{r Popularity Of Broadcasting Days, echo=TRUE, warning=FALSE, results='markup', fig.width=10}
+unique_anime %>% 
+  filter(!(is.na(broadcast_day))) %>% 
+  filter(!(broadcast_day == "Unknown")) %>% 
+  filter(!(broadcast_day == "Not")) %>% 
+  group_by(broadcast_day) %>% 
+  summarise(show_count = n(), mean_viewers = mean(wishlisted_members, na.rm = TRUE)) %>% 
+  mutate(percent_shows = show_count/sum(show_count,na.rm = TRUE)*100, percent_viewers= mean_viewers/sum(mean_viewers,na.rm = TRUE)*100) %>%
+  mutate(broadcast_day =factor(broadcast_day, levels = c('Mondays','Tuesdays','Wednesdays','Thursdays','Fridays','Saturdays','Sundays'))) %>%
+  arrange(broadcast_day) %>%
+  plot_ly( x = ~broadcast_day, y = ~percent_shows, type = 'bar', name = 'Percentage of shows broadcasted', marker = list(color = 'rgb(49,130,189)')) %>%
+  add_trace(y = ~percent_viewers, name = 'Viewership', marker = list(color = 'rgb(204,204,204)')) %>%
+  layout(title = "Comparison of percentage of shows broadcasted and its viewership by Weekdays",
+         xaxis = list(title = "Days of the week", tickangle = -45),
+         yaxis = list(title = ""),
+         margin = list(b = 100),
+         barmode = 'group')
+
+```
+
+
+
+Over here, we observe that the producers broadcast the number of shows on weekends as compared to weekdays. The most shows are broadcasted on Sundays, followed by Saturdays and Fridays. The Least number of shows are produced on Wednesdays. This makes sense as the producers want to tap the time when the audience is freer which happens on the weekend compared to weekdays.
+
+The other graph indicates the wishlist user percentage. Around 17 % and 16.5% of the total users add animes in their wish list which are released on Friday and Thursday, perhaps preparing to watch them during the weekend compared to the beginning of the week where around 12% of people add shows that are shown on Monday and Tuesday.
+
+
+### Number of Episodes
+
+Here we try to figure out how no. of episodes of the anime is related to the number of people who have added these shows in their favorite list.
+
+
+```{r Season wrt to Popularity Index  , echo=TRUE, warning=FALSE, message=FALSE, results='markup', fig.width=10}
+
+unique_anime %>% 
+  filter(!(is.na(no_of_episodes))) %>% 
+  filter(!(no_of_episodes == "NA")) %>% filter(anime_type =="TV") %>%
+   plot_ly( x = ~no_of_episodes, y = ~favorites,
+           marker = list(size = 5, 
+                         color = 'rgba(255, 182, 193, .9)',
+                         line = list(color = 'rgba(152, 0, 0, .8)',
+                                     width = 2))) %>%
+   layout(title = 'Number of Episodes v/s Favorites',
+          yaxis = list(title= "Number of favorites",zeroline = FALSE),
+          xaxis = list(title = "No of Episodes",zeroline = FALSE))
+```
+
+
+From the above graph, we see that the number of episodes in an anime is almost inversely proportional to the number of people who add those anime in their favorites list. As the number of episodes increases, chances of it being in the favorite list decreases. This is a clear indication that people prefer shorter animes over the larger one. For example, the anime which has just 64 episodes have been in the favorite list of more than 120 thousand people while anime with more than 500 episodes have almost 0 number of favorites. In general, the animes having less than 100 episodes are more successful when it comes to people putting them in their favorite list.
+
+
+### Anime Source
+
+Lets now look at the sources of anime which are the most popular.
+
+```{r Most popular Anime Sources, echo=TRUE, warning=FALSE, results='markup', fig.width=10}
+unique_anime %>%
+  filter(source != 'Unknown') %>% 
+  count(source, sort = TRUE) %>%
+plot_ly(labels = ~source, values = ~n) %>%
+  add_pie(hole = 0.6) %>%
+  layout(title = "Percentage of Anime per source",  showlegend = T,
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+```
+
+From the graph, we can conclude that a lot of shows are original which is around 37.6% works followed by Manga and Game. The source which is least popular is Digital Manga having a share of just 0.081%.
+
+### Producers
+
+Over here, we analyse the number of producers who produce the most number of animes and the popularity indexes of those shows. 
+
+```{r Producers wrt to the Number of Animes, echo=TRUE, warning=FALSE, results='markup', fig.width=10}
+unique_anime %>%
+  filter(!is.na(producers)) %>%
+  group_by(producers) %>%
+  summarise(total_anime = n(),popularity =mean(popularity_index,na.rm = TRUE))%>%
+  mutate(Popularity = popularity/sum(popularity)*20000) %>%
+  top_n(10, wt = total_anime) %>% 
+  plot_ly( x = ~total_anime, y = ~producers, type = 'scatter', mode = 'markers',color = ~Popularity,
+          marker = list(size = ~Popularity, opacity = 0.5)) %>%
+  layout(title = 'Most Popular Producers',
+         xaxis = list(title="Total Number of Anime Produced",showgrid = FALSE),
+         yaxis = list(title= "Producers",showgrid = FALSE))
+```
+
+
+We see from the above graph that NHK has the maximum number of animes produced(499) with the highest popularity index. Surprisingly animes produced by Sanrio(163) have a high popularity index compared to animes produced by Aniplex and TV Tokyo production houses who have produced 379 and 429 animes shows. 
+
+### Regression Analysis
+
+We now try to figure out if there is a relationship between the people who rated a particular show and the ratings of the show. We choose rated_by_no_of_viewers as the independent variable compared to other variables as it has the highest correlation with viewers_rating compared to others.
+
+On performing a linear regression analysis, we obtain an **R-square** value of **0.43**. Thus, we can conclude that 43 percent of the shows which have a high number of raters have a good average rating as well.
+
+The code and the linear regression model can be found below:
+```{r Regression Analysis, fig.width=10}
+reg <- unique_anime %>% 
+  filter(rated_by_no_of_viewers > 99 & airing_status == FALSE)
+
+regres <- summary(lm(viewers_rating ~ log(rated_by_no_of_viewers), data = reg))$r.squared
+txt <- substitute(R^2 == regres, list(regres = format(regres, digits = 2)))
+
+unique_anime %>% 
+  filter(airing_status == FALSE & rated_by_no_of_viewers > 99) %>%
+  ggplot(aes(x = rated_by_no_of_viewers, y = viewers_rating)) +
+  xlab("No of people who rated") +
+  ylab("Ratings of viewers") +
+  stat_bin_hex(bins = 50) +
+  scale_fill_distiller(palette = "Spectral") +
+  stat_smooth(method = "lm", 
+              color = "orchid", 
+              size = 1.5, 
+              formula = y ~ log(x)) +
+  annotate("text", 
+           label = as.character(as.expression(txt)), 
+           parse = TRUE, 
+           color = "orchid", 
+           x = 750000, 
+           y = 2.5, 
+           size = 7)
+```
+
+
+## 5. Conclusion
+
+As a producer, there are a lot of factors that one should consider before investing money in a particular anime.
+
+Thus, from our analysis results obtained so far, we can figure out the factors which the producers can consider before investing money in a particular anime:
+
+* **Anime Trend**: 
+Animes of Movie type are the oldest types of anime which have been existing for more than 100 years now compared to other the anime types which are in existence from around the 1960s. Count of the animes of TV series types has been maximum in the recent year compared to other anime types indicating its popularity. OVA and Special anime types have seen the reduction in the anime count in recent years compared to count of animes of TV, Movies, ONA and MUsic.
+
+* **Anime Type**: 
+The most popular anime-type based on viewer rating is TV. Thus, that should be the first choice for the producers and the least should be music.
+ 
+* **Anime Genre**:
+The most popular anime genre based on viewer rating is Thriller, followed by Josei and Mystery while the least popular is Dementia. Surprisingly even though, Thriller genre has the highest mean viewer rating, Comedy Genre has the most number of unique animes among all the anime classifications followed by Action and Fantasy. Among the least famous kinds in the anime industry are Shounen AI, Shoujo Ai, and Cars.
+
+* **Broadcasting Days**:
+We observe that the producers broadcast more number of shows on weekends as compared to weekdays. The most shows are broadcasted on Sundays, followed by Saturdays and Fridays. The least number of shows are produced on Wednesdays. 
+
+* **Number of episodes**:
+People prefer shorter animes over the larger one. In general, the animes having less than 100 episodes are more successful when it comes to people putting them in their favorite list.
+
+* **Anime Source**:
+Two of the most famous sources of animes are Original and Manga which have a combined market share of more than 50%. The least popular source is Digital Manga having a share of just 0.081%.
+
+* **Producers**:
+NHK production house has the maximum number of animes produced with the highest popularity index. Surprisingly animes produced by Sanrio(163) have a high popularity index compared to animes produced by Aniplex and TV Tokyo production houses who have produced 379 and 429 animes shows which indicates the popularity index is not directly correlated to the number of animes produced at a production house.
